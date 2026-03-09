@@ -1,0 +1,710 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Generative Patterns</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&display=swap');
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #c8c5bb;
+    --panel: #b8b5ac;
+    --border: #a8a59c;
+    --accent: #e63b2e;
+    --gold: #8a6a00;
+    --text: #1a1a1a;
+    --muted: #555;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Space Mono', monospace;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  header {
+    padding: 18px 28px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  header h1 {
+    font-size: 13px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--gold);
+  }
+
+  header span {
+    font-size: 11px;
+    color: var(--muted);
+    letter-spacing: 0.1em;
+  }
+
+  .main {
+    display: grid;
+    grid-template-columns: 1fr 280px;
+    flex: 1;
+    min-height: 0;
+    height: calc(100vh - 57px);
+  }
+
+  /* Canvas area */
+  .canvas-area {
+    position: relative;
+    display: flex;
+    align-items: stretch;
+    justify-content: stretch;
+    background: #c8c5bb;
+    overflow: hidden;
+  }
+
+  #patternCanvas {
+    width: 100%;
+    height: 100%;
+    display: block;
+    will-change: transform;
+  }
+
+  .svg-el {
+    will-change: transform, opacity;
+  }
+
+  /* Sidebar */
+  .sidebar {
+    background: var(--panel);
+    border-left: 1px solid var(--border);
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+  }
+
+  .sidebar-section {
+    padding: 20px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .sidebar-section-title {
+    font-size: 9px;
+    letter-spacing: 0.25em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 14px;
+  }
+
+  /* Pattern grid */
+  .pattern-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
+  .pattern-btn {
+    background: #ccc9c0;
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-family: 'Space Mono', monospace;
+    font-size: 9px;
+    padding: 8px 6px;
+    cursor: pointer;
+    text-align: left;
+    letter-spacing: 0.05em;
+    transition: all 0.15s;
+    line-height: 1.4;
+  }
+
+  .pattern-btn:hover { border-color: var(--gold); color: var(--gold); }
+  .pattern-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+  /* Controls */
+  .control-row {
+    margin-bottom: 18px;
+  }
+
+  .control-label {
+    display: flex;
+    justify-content: space-between;
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    color: var(--muted);
+    margin-bottom: 8px;
+  }
+
+  .control-label span:last-child { color: var(--gold); }
+
+  .control-row.disabled .control-label { opacity: 0.35; }
+  .control-row.disabled input[type=range] { opacity: 0.3; cursor: not-allowed; pointer-events: none; }
+
+  input[type=range] {
+    width: 100%;
+    -webkit-appearance: none;
+    height: 2px;
+    background: var(--border);
+    outline: none;
+    cursor: pointer;
+  }
+
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 14px;
+    height: 14px;
+    background: var(--accent);
+    border-radius: 0;
+    cursor: pointer;
+    border: 2px solid var(--text);
+  }
+
+  input[type=range]::-moz-range-thumb {
+    width: 14px;
+    height: 14px;
+    background: var(--accent);
+    border-radius: 0;
+    cursor: pointer;
+    border: 2px solid var(--text);
+  }
+
+  /* Pattern name */
+  .pattern-name {
+    position: absolute;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 10px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: rgba(26,26,26,0.25);
+    white-space: nowrap;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+
+  @keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Pattern Studio</h1>
+  <span>10 generative patterns</span>
+</header>
+
+<div class="main">
+  <div class="canvas-area">
+    <svg id="patternCanvas" viewBox="0 0 400 400" preserveAspectRatio="xMidYMid slice"></svg>
+    <div class="pattern-name" id="patternNameLabel"></div>
+  </div>
+
+  <div class="sidebar">
+    <div class="sidebar-section">
+      <div class="sidebar-section-title">Pattern</div>
+      <div class="pattern-grid" id="patternGrid"></div>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-section-title">Controls</div>
+
+      <div class="control-row">
+        <div class="control-label"><span>SPEED</span><span id="speedVal">0.50</span></div>
+        <input type="range" id="speedCtrl" min="0" max="1" step="0.01" value="0.5" />
+      </div>
+
+      <div class="control-row">
+        <div class="control-label"><span>INTENSITY</span><span id="intensityVal">0.50</span></div>
+        <input type="range" id="intensityCtrl" min="0.1" max="1" step="0.01" value="0.5" />
+      </div>
+
+      <div class="control-row" id="rotRow">
+        <div class="control-label"><span>ROTATION</span><span id="rotationVal">0.50</span></div>
+        <input type="range" id="rotCtrl" min="0" max="1" step="0.01" value="0.5" />
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ─────────────────────────────────────────────
+// State
+// ─────────────────────────────────────────────
+const state = {
+  pattern: 0,
+  speed: 0.5,
+  intensity: 0.5,
+  rotation: 0.5,
+};
+
+const patternNames = [
+  "Concentric Circles", "Orange Spheres Grid", "Pink Quarter Circles",
+  "Target Circles", "Sunburst", "Wave Stripes",
+  "Diamond Tessellation", "Flower Pattern", "Hypnotic Spiral", "Sparkling Stars"
+];
+
+// ─────────────────────────────────────────────
+// Helpers
+// ─────────────────────────────────────────────
+const SVG_NS = "http://www.w3.org/2000/svg";
+
+function seededRandom(seed) {
+  const x = Math.sin(seed) * 10000;
+  return x - Math.floor(x);
+}
+function getRandomDirections(seed, count) {
+  return Array.from({length: count}, (_, i) => seededRandom(seed + i * 100) > 0.5 ? 1 : -1);
+}
+function getRandomOffsets(seed, count, maxOffset) {
+  return Array.from({length: count}, (_, i) => (seededRandom(seed + i * 50) - 0.5) * 2 * maxOffset);
+}
+function normalizeControls(s) {
+  return {
+    speed: s.speed * 3 + 0.1,
+    intensity: s.intensity * 2,
+    rotation: s.rotation * 360,
+    seed: 42,
+  };
+}
+
+function svgEl(tag, attrs = {}) {
+  const el = document.createElementNS(SVG_NS, tag);
+  for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, v);
+  return el;
+}
+
+function pulse(el, delay, duration) {
+  el.style.animation = `pulse ${duration}s ease-in-out ${delay}s infinite`;
+}
+
+// ─────────────────────────────────────────────
+// Pattern engine
+// ─────────────────────────────────────────────
+const canvas = document.getElementById('patternCanvas');
+let cancelFn = null;
+
+function clearCanvas() {
+  if (cancelFn) { cancelFn(); cancelFn = null; }
+  while (canvas.firstChild) canvas.removeChild(canvas.firstChild);
+  canvas.style.animation = '';
+  canvas.style.transform = '';
+}
+
+// ── Pattern 1: Concentric Circles ──
+function drawPattern1(c) {
+  const {speed} = c;
+  const intensity = Math.min(c.intensity, 1.0); // 슬라이더 0→0, 0.5→1.0(최대), 1.0→1.0 클램프
+  const defs = svgEl('defs');
+  const mask = svgEl('mask', {id:'m1'});
+  const maskRect = svgEl('rect', {width:'400',height:'400',fill:'white'});
+  mask.appendChild(maskRect);
+  const g2 = svgEl('g');
+  for (let i=0;i<8;i++) {
+    g2.appendChild(svgEl('circle',{cx:'200',cy:'200',r:String((160-i*20)*intensity),fill:'none',stroke:'black','stroke-width':String(20*intensity)}));
+  }
+  mask.appendChild(g2);
+  defs.appendChild(mask);
+  canvas.appendChild(defs);
+
+  const g1 = svgEl('g', {mask:'url(#m1)'});
+  g1.style.willChange = 'transform';
+  g2.style.willChange = 'transform';
+  for (let i=0;i<8;i++) {
+    g1.appendChild(svgEl('circle',{cx:'200',cy:'200',r:String((160-i*20)*intensity),fill:'none',stroke:i%2===0?'#1a1a1a':'transparent','stroke-width':String(20*intensity)}));
+  }
+  canvas.appendChild(g1);
+
+  const sq=80, cx=200, cy=200;
+  const accents = [{x:cx-sq,y:cy-sq},{x:cx+sq,y:cy-sq},{x:cx-sq,y:cy+sq},{x:cx+sq,y:cy+sq}];
+  accents.forEach((p,i)=>{
+    const c2 = svgEl('circle',{cx:String(p.x),cy:String(p.y),r:String(12*intensity),fill:'#e63b2e'});
+    pulse(c2, i*0.4, 3/speed);
+    canvas.appendChild(c2);
+  });
+
+  // 두 그룹 모두 랜덤 초기 위치에서 시작
+  const groups = [
+    {x: 50 + Math.random()*300, y: 50 + Math.random()*300, vx:1.2, vy:0.75},
+    {x: 50 + Math.random()*300, y: 50 + Math.random()*300, vx:-0.9, vy:1.05}
+  ];
+  const grpEls = [g1, g2];
+  let raf;
+  function animate() {
+    groups.forEach((grp,i)=>{
+      grp.x += grp.vx * speed; grp.y += grp.vy * speed;
+      if(grp.x<-100)grp.x=500; if(grp.x>500)grp.x=-100;
+      if(grp.y<-100)grp.y=500; if(grp.y>500)grp.y=-100;
+      grpEls[i].setAttribute('transform',`translate(${grp.x-200},${grp.y-200})`);
+    });
+    raf = requestAnimationFrame(animate);
+  }
+  raf = requestAnimationFrame(animate);
+  return ()=>cancelAnimationFrame(raf);
+}
+
+// ── Pattern 2: Orange Spheres Grid ──
+function drawPattern2(c) {
+  const {speed, intensity, seed} = c;
+  const offsets = getRandomOffsets(seed, 25, 20);
+  const defs = svgEl('defs');
+  const grad = svgEl('radialGradient',{id:'og2'});
+  const s1 = svgEl('stop',{offset:'0%'}); s1.setAttribute('stop-color','#ffcc00');
+  const s2 = svgEl('stop',{offset:'100%'}); s2.setAttribute('stop-color','#ff6b00');
+  grad.appendChild(s1); grad.appendChild(s2);
+  defs.appendChild(grad);
+  canvas.appendChild(defs);
+
+  for(let row=0;row<5;row++) for(let col=0;col<5;col++){
+    const idx=row*5+col;
+    const ci = svgEl('circle',{
+      cx: String(50+col*100+offsets[idx]),
+      cy: String(50+row*100+offsets[(idx+5)%25]),
+      r: String(38*intensity),
+      fill:'url(#og2)'
+    });
+    pulse(ci, (row+col)*0.15, 2/speed);
+    canvas.appendChild(ci);
+  }
+  return ()=>{};
+}
+
+// ── Pattern 3: Pink Quarter Circles ──
+function drawPattern3(c) {
+  const {speed, intensity} = c;
+  const colors = ['#ff1493','#7cfc00','#ff6347'];
+  const colEls = [];
+  for(let col=0;col<3;col++){
+    const g = svgEl('g');
+    for(let row=0;row<3;row++){
+      const sz = 100*intensity;
+      const p = svgEl('path',{
+        d:`M ${col*100} ${row*100} A ${sz} ${sz} 0 0 1 ${100+col*100} ${100+row*100} L ${col*100} ${100+row*100} Z`,
+        fill: colors[(row+col)%3]
+      });
+      g.appendChild(p);
+    }
+    canvas.appendChild(g);
+    colEls.push(g);
+  }
+  let raf, time=0;
+  const phases = [0, 0.4, 0.8];
+  function animate(){
+    time += 0.03*speed;
+    if(time > 6283) time -= 6283;
+    colEls.forEach((g,i)=>{
+      const oy = Math.sin(time+phases[i])*20;
+      g.setAttribute('transform',`translate(0,${oy})`);
+    });
+    raf = requestAnimationFrame(animate);
+  }
+  raf = requestAnimationFrame(animate);
+  return ()=>cancelAnimationFrame(raf);
+}
+
+// ── Pattern 4: Target Circles ──
+function drawPattern4(c) {
+  const {speed, intensity, rotation, seed} = c;
+  const dirs = getRandomDirections(seed, 20);
+  for(let i=0;i<10;i++){
+    const ci = svgEl('circle',{cx:'200',cy:'200',r:String((190-i*19)*(2-intensity)),fill:i%2===0?'#e63b2e':'#2e8b57'});
+    pulse(ci, i*0.1, 3/speed);
+    canvas.appendChild(ci);
+  }
+  for(let i=0;i<20;i++){
+    const angle = i*Math.PI/10 - Math.PI/2 + rotation*dirs[i]*0.02;
+    const li = svgEl('line',{x1:'200',y1:'200',x2:String(200+Math.cos(angle)*200),y2:String(200+Math.sin(angle)*200),stroke:i%2===0?'#e63b2e':'#2e8b57','stroke-width':String(3*intensity)});
+    pulse(li, i*0.05, 2/speed);
+    canvas.appendChild(li);
+  }
+  return ()=>{};
+}
+
+// ── Pattern 5: Sunburst ──
+function drawPattern5(c) {
+  const {speed, intensity, rotation, seed} = c;
+  const dirs = getRandomDirections(seed, 24);
+  const rayLen = 1000;
+  for(let i=0;i<24;i++){
+    const base = i*Math.PI/12;
+    const rot = rotation*dirs[i]*0.01;
+    const a1 = base+rot, a2 = base+Math.PI/24+rot;
+    const p = svgEl('polygon',{
+      points:`0,0 ${Math.cos(a1)*rayLen*intensity},${Math.sin(a1)*rayLen*intensity} ${Math.cos(a2)*rayLen*intensity},${Math.sin(a2)*rayLen*intensity}`,
+      fill: i%2===0?'#ffcc00':'#ff8c00'
+    });
+    pulse(p, i*0.05, 2/speed);
+    canvas.appendChild(p);
+  }
+  // 캔버스 실제 크기 기준으로 viewBox 설정 (중앙이 0,0)
+  const W = canvas.clientWidth || 800;
+  const H = canvas.clientHeight || 600;
+  const half = Math.max(W, H);
+  canvas.setAttribute('viewBox',`${-half/2} ${-half/2} ${half} ${half}`);
+  canvas.style.animation = `spin ${60/speed}s linear infinite`;
+  return ()=>{ canvas.setAttribute('viewBox','0 0 400 400'); canvas.style.animation=''; };
+}
+
+// ── Pattern 6: Wave Stripes ──
+function drawPattern6(c) {
+  const {speed, intensity, seed} = c;
+  const dirs = getRandomDirections(seed, 12);
+  const offsets = getRandomOffsets(seed, 12, 30);
+  const paths = [];
+  for(let i=0;i<12;i++){
+    const p = svgEl('path',{
+      d:`M -50 ${i*35} Q 100 ${i*35+20}, 200 ${i*35} T 450 ${i*35}`,
+      fill:'none',
+      stroke: i%2===0?'#1e3a5f':'#2d8b8b',
+      'stroke-width': String(18*intensity),
+      'stroke-linecap':'round'
+    });
+    canvas.appendChild(p);
+    paths.push(p);
+  }
+  let raf, time=0;
+  function animate(){
+    time += 0.02*speed;
+    if(time > 6283) time -= 6283;
+    paths.forEach((p,i)=>{
+      const ox = Math.sin(time*dirs[i]+i*0.5)*20*intensity+offsets[i];
+      p.setAttribute('transform',`translate(${ox},0)`);
+    });
+    raf = requestAnimationFrame(animate);
+  }
+  raf = requestAnimationFrame(animate);
+  return ()=>cancelAnimationFrame(raf);
+}
+
+// ── Pattern 7: Diamond Tessellation ──
+function drawPattern7(c) {
+  const {speed, intensity, seed} = c;
+  const dirs = getRandomDirections(seed, 64);
+  const colors = ['#d2691e','#daa520','#8b4513'];
+  let raf, time=0;
+  const groups = [];
+  for(let row=0;row<8;row++) for(let col=0;col<8;col++){
+    const idx=row*8+col;
+    const sz=25*intensity;
+    const cx=25+col*50, cy=25+row*50;
+    const g = svgEl('g');
+    g.style.willChange = 'transform';
+    g.appendChild(svgEl('polygon',{
+      points:`${cx},${cy-sz} ${cx+sz},${cy} ${cx},${cy+sz} ${cx-sz},${cy}`,
+      fill:colors[(row+col)%3]
+    }));
+    canvas.appendChild(g);
+    groups.push({el:g, cx, cy, dir:dirs[idx]});
+  }
+  function animate(){
+    time += 0.8*speed;
+    if(time > 36000) time -= 36000; // 주기 리셋으로 float 정밀도 유지
+    groups.forEach(({el,cx,cy,dir})=>{
+      el.setAttribute('transform',`rotate(${time*dir},${cx},${cy})`);
+    });
+    raf = requestAnimationFrame(animate);
+  }
+  raf = requestAnimationFrame(animate);
+  return ()=>cancelAnimationFrame(raf);
+}
+
+// ── Pattern 8: Flower Pattern ──
+function drawPattern8(c) {
+  const {speed, intensity, seed} = c;
+  const dirs = getRandomDirections(seed, 16);
+  const offsets = getRandomOffsets(seed, 16, 20);
+  const circles = [];
+  // baseR: intensity 0.2~2 → r 7~70
+  const baseR = 35 * intensity;
+  for(let row=0;row<4;row++) for(let col=0;col<4;col++){
+    const idx=row*4+col;
+    const ci = svgEl('circle',{
+      cx: String(60+col*95+offsets[idx]),
+      cy: String(60+row*95+offsets[(idx+4)%16]),
+      r: String(baseR),
+      fill: idx%2===0?'#e63b2e':'#6b8e23'
+    });
+    canvas.appendChild(ci);
+    circles.push({el:ci, dir:dirs[idx], baseR});
+  }
+  let raf, time=0;
+  function animate(){
+    time += 0.03*speed;
+    if(time > 6283) time -= 6283;
+    circles.forEach(({el,dir,baseR},i)=>{
+      const scale = 1+Math.sin(time*dir+i*0.8)*0.3;
+      el.setAttribute('r', String(baseR*scale));
+    });
+    raf = requestAnimationFrame(animate);
+  }
+  raf = requestAnimationFrame(animate);
+  return ()=>cancelAnimationFrame(raf);
+}
+
+// ── Pattern 9: Hypnotic Spiral ──
+function drawPattern9(c) {
+  const {speed, intensity, rotation, seed} = c;
+  const dirs = getRandomDirections(seed, 18);
+  // 캔버스 실제 크기 기준 중앙 좌표
+  const W = canvas.clientWidth || 800;
+  const H = canvas.clientHeight || 600;
+  const cx = W/2, cy = H/2;
+  const half = Math.max(W, H);
+  canvas.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  for(let i=0;i<12;i++){
+    const base = i*Math.PI/6 + rotation*dirs[i]*0.02;
+    const p = svgEl('path',{
+      d:`M ${cx} ${cy} Q ${cx+Math.cos(base)*100*intensity} ${cy+Math.sin(base)*100*intensity}, ${cx+Math.cos(base)*half*0.4*intensity} ${cy+Math.sin(base)*half*0.4*intensity}`,
+      fill:'none',
+      stroke: i%2===0?'#1a1a1a':'#f5f0e6',
+      'stroke-width': String(30*intensity)
+    });
+    canvas.appendChild(p);
+  }
+  for(let i=0;i<6;i++){
+    const base = i*Math.PI/3 + rotation*dirs[i+12]*0.02;
+    const ci = svgEl('circle',{
+      cx: String(cx+Math.cos(base)*60*intensity),
+      cy: String(cy+Math.sin(base)*60*intensity),
+      r: String(20*intensity),
+      fill: i%2===0?'#1a1a1a':'#f5f0e6'
+    });
+    pulse(ci, 0, 6/speed);
+    canvas.appendChild(ci);
+  }
+  canvas.style.animation = `spin ${60/speed}s linear infinite`;
+  canvas.style.transformOrigin = `${cx}px ${cy}px`;
+  return ()=>{ canvas.style.animation=''; canvas.style.transformOrigin=''; };
+}
+
+// ── Pattern 10: Sparkling Stars ──
+function drawPattern10(c) {
+  const {speed, intensity, seed} = c;
+  const dirs = getRandomDirections(seed, 11);
+  const offsets = getRandomOffsets(seed, 8, 30);
+
+  function starPath(cx,cy,pts,outerR,innerR){
+    let d='';
+    for(let i=0;i<pts*2;i++){
+      const r=i%2===0?outerR:innerR;
+      const angle=(i*Math.PI)/pts-Math.PI/2;
+      const x=cx+Math.cos(angle)*r, y=cy+Math.sin(angle)*r;
+      d += i===0?`M ${x} ${y}`:`L ${x} ${y}`;
+    }
+    return d+'Z';
+  }
+
+  const s0 = svgEl('path',{d:starPath(200,200,12,150*intensity,60*intensity),fill:'#e63b2e'});
+  const s1 = svgEl('path',{d:starPath(200,200,12,100*intensity,40*intensity),fill:'#ffcc00'});
+  const s2 = svgEl('path',{d:starPath(200,200,8,50*intensity,20*intensity),fill:'#1a1a1a'});
+  canvas.appendChild(s0); canvas.appendChild(s1); canvas.appendChild(s2);
+
+  const smallStars = [];
+  for(let i=0;i<8;i++){
+    const angle=(i*Math.PI*2)/8;
+    const sx=200+Math.cos(angle)*(160+offsets[i]);
+    const sy=200+Math.sin(angle)*(160+offsets[i]);
+    const sp = svgEl('path',{d:starPath(sx,sy,6,25*intensity,10*intensity),fill:i%2===0?'#ff8c00':'#e63b2e'});
+    canvas.appendChild(sp);
+    smallStars.push({el:sp, cx:sx, cy:sy, dir:dirs[i+3]});
+  }
+
+  let raf, time=0;
+  function animate(){
+    time += 0.006*speed;
+    if(time > 6283) time -= 6283;
+    [[s0,1],[s1,-1.5],[s2,2]].forEach(([el,spd],i)=>{
+      el.setAttribute('transform',`rotate(${time*50*spd*dirs[i]},200,200)`);
+    });
+    smallStars.forEach(({el,cx,cy,dir},i)=>{
+      el.setAttribute('transform',`rotate(${time*60*(1+i*0.3)*dir},${cx},${cy})`);
+    });
+    raf = requestAnimationFrame(animate);
+  }
+  raf = requestAnimationFrame(animate);
+  return ()=>cancelAnimationFrame(raf);
+}
+
+const patternFns = [
+  drawPattern1, drawPattern2, drawPattern3, drawPattern4, drawPattern5,
+  drawPattern6, drawPattern7, drawPattern8, drawPattern9, drawPattern10
+];
+
+// ─────────────────────────────────────────────
+// Render
+// ─────────────────────────────────────────────
+function render() {
+  clearCanvas();
+  canvas.setAttribute('viewBox','0 0 400 400');
+  const c = normalizeControls(state);
+  cancelFn = patternFns[state.pattern](c) || (()=>{});
+  document.getElementById('patternNameLabel').textContent = patternNames[state.pattern];
+}
+
+// ─────────────────────────────────────────────
+// UI setup
+// ─────────────────────────────────────────────
+const grid = document.getElementById('patternGrid');
+patternNames.forEach((name, i) => {
+  const btn = document.createElement('button');
+  btn.className = 'pattern-btn' + (i===0?' active':'');
+  btn.textContent = (i+1).toString().padStart(2,'0') + ' ' + name;
+  btn.dataset.idx = i;
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.pattern-btn').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    state.pattern = i;
+    updateControlStates();
+    render();
+  });
+  grid.appendChild(btn);
+});
+
+function bindSlider(id, valId, key, decimals=2) {
+  const sl = document.getElementById(id);
+  const vl = document.getElementById(valId);
+  let debounceTimer = null;
+  sl.addEventListener('input', () => {
+    state[key] = parseFloat(sl.value);
+    vl.textContent = parseFloat(sl.value).toFixed(decimals);
+    // 값 표시는 즉시, render는 50ms debounce
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(render, 50);
+  });
+}
+
+bindSlider('speedCtrl','speedVal','speed');
+bindSlider('intensityCtrl','intensityVal','intensity');
+bindSlider('rotCtrl','rotationVal','rotation');
+
+// Patterns with rotation disabled: 1,2,3,6,7,8,10 (index 0,1,2,5,6,7,9)
+const rotationDisabled = new Set([0, 1, 2, 5, 6, 7, 9]);
+function updateControlStates() {
+  const rotRow = document.getElementById('rotRow');
+  const rotCtrl = document.getElementById('rotCtrl');
+  if (rotationDisabled.has(state.pattern)) {
+    rotRow.classList.add('disabled');
+    rotCtrl.disabled = true;
+  } else {
+    rotRow.classList.remove('disabled');
+    rotCtrl.disabled = false;
+  }
+}
+
+// ─────────────────────────────────────────────
+// Init
+// ─────────────────────────────────────────────
+updateControlStates();
+render();
+</script>
+</body>
+</html>
